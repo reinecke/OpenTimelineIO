@@ -22,7 +22,9 @@
 # language governing permissions and limitations under the Apache License.
 #
 
-"""Imeplement Sequence sublcass of composition."""
+"""Implement Track sublcass of composition."""
+
+import collections
 
 from .. import (
     core,
@@ -36,7 +38,7 @@ from . import (
 )
 
 
-class SequenceKind:
+class TrackKind:
     Video = "Video"
     Audio = "Audio"
 
@@ -48,9 +50,9 @@ class NeighborGapPolicy:
 
 
 @core.register_type
-class Sequence(core.Composition):
-    _serializable_label = "Sequence.1"
-    _composition_kind = "Sequence"
+class Track(core.Composition):
+    _serializable_label = "Track.1"
+    _composition_kind = "Track"
     _modname = "schema"
 
     def __init__(
@@ -58,7 +60,7 @@ class Sequence(core.Composition):
         name=None,
         children=None,
         source_range=None,
-        kind=SequenceKind.Video,
+        kind=TrackKind.Video,
         metadata=None,
     ):
         core.Composition.__init__(
@@ -72,7 +74,7 @@ class Sequence(core.Composition):
 
     kind = core.serializable_field(
         "kind",
-        doc="Composition kind (Stack, Sequence)"
+        doc="Composition kind (Stack, Track)"
     )
 
     def range_of_child_at_index(self, index):
@@ -92,50 +94,50 @@ class Sequence(core.Composition):
         return opentime.TimeRange(start_time, child.duration())
 
     def trimmed_range_of_child_at_index(self, index, reference_space=None):
-        range = self.range_of_child_at_index(index)
+        child_range = self.range_of_child_at_index(index)
 
-        if not self.source_range:
-            return range
+        return self.trim_child_range(child_range)
 
-        # cropped out entirely
-        if (
-            self.source_range.start_time >= range.end_time_exclusive()
-            or self.source_range.end_time_exclusive() <= range.start_time
-        ):
-            return None
+    def handles_of_child(self, child):
+        """If media beyond the ends of this child are visible due to adjacent
+        Transitions (only applicable in a Track) then this will return the
+        head and tail offsets as a tuple of RationalTime objects. If no handles
+        are present on either side, then None is returned instead of a
+        RationalTime.
 
-        if range.start_time < self.source_range.start_time:
-            range = opentime.range_from_start_end_time(
-                self.source_range.start_time,
-                range.end_time_exclusive()
-            )
+        Example usage:
+        head, tail = track.handles_of_child(clip)
+        if head:
+          ...
+        if tail:
+          ...
+        """
+        head, tail = None, None
+        before, after = self.neighbors_of(child)
+        if isinstance(before, transition.Transition):
+            head = before.in_offset
+        if isinstance(after, transition.Transition):
+            tail = after.out_offset
 
-        if range.end_time_exclusive() > self.source_range.end_time_exclusive():
-            range = opentime.range_from_start_end_time(
-                range.start_time,
-                self.source_range.end_time_exclusive()
-            )
-
-        return range
+        return head, tail
 
     def available_range(self):
-        durations = []
-
-        # resolve the implicit gap
-        if self._children and isinstance(self[0], transition.Transition):
-            durations.append(self[0].in_offset)
-        if self._children and isinstance(self[-1], transition.Transition):
-            durations.append(self[-1].out_offset)
-
-        durations.extend(
-            child.duration() for child in self if isinstance(child, core.Item)
+        # Sum up our child items' durations
+        duration = sum(
+            (c.duration() for c in self if isinstance(c, core.Item)),
+            opentime.RationalTime()
         )
+
+        # Add the implicit gap when a Transition is at the start/end
+        if self and isinstance(self[0], transition.Transition):
+            duration += self[0].in_offset
+        if self and isinstance(self[-1], transition.Transition):
+            duration += self[-1].out_offset
 
         result = opentime.TimeRange(
-            duration=sum(durations, opentime.RationalTime())
+            start_time=opentime.RationalTime(0, duration.rate),
+            duration=duration
         )
-
-        result.start_time = opentime.RationalTime(0, result.duration.rate)
 
         return result
 
@@ -143,8 +145,26 @@ class Sequence(core.Composition):
         return self.each_child(search_range, clip.Clip)
 
     def neighbors_of(self, item, insert_gap=NeighborGapPolicy.never):
+        """Returns the neighbors of the item as a namedtuple, (previous, next).
+
+        Can optionally fill in gaps when transitions have no gaps next to them.
+
+        with insert_gap == NeighborGapPolicy.never:
+        [A, B, C] :: neighbors_of(B) -> (A, C)
+        [A, B, C] :: neighbors_of(A) -> (None, B)
+        [A, B, C] :: neighbors_of(C) -> (B, None)
+        [A] :: neighbors_of(A) -> (None, None)
+
+        with insert_gap == NeighborGapPolicy.around_transitions:
+            (assuming A and C are transitions)
+        [A, B, C] :: neighbors_of(B) -> (A, C)
+        [A, B, C] :: neighbors_of(A) -> (Gap, B)
+        [A, B, C] :: neighbors_of(C) -> (B, Gap)
+        [A] :: neighbors_of(A) -> (Gap, Gap)
+        """
+
         try:
-            index = self.index(item)
+            index = self.index_of_child(item)
         except ValueError:
             raise ValueError(
                 "item: {} is not in composition: {}".format(
@@ -153,7 +173,7 @@ class Sequence(core.Composition):
                 )
             )
 
-        result = []
+        previous, next_item = None, None
 
         # look before index
         if (
@@ -161,27 +181,29 @@ class Sequence(core.Composition):
             and insert_gap == NeighborGapPolicy.around_transitions
             and isinstance(item, transition.Transition)
         ):
-            result.append(
-                gap.Gap(
-                    source_range=opentime.TimeRange(duration=item.in_offset)
-                )
+            previous = gap.Gap(
+                source_range=opentime.TimeRange(duration=item.in_offset)
             )
         elif index > 0:
-            result.append(self[index - 1])
-
-        result.append(item)
+            previous = self[index - 1]
 
         if (
             index == len(self) - 1
             and insert_gap == NeighborGapPolicy.around_transitions
             and isinstance(item, transition.Transition)
         ):
-            result.append(
-                gap.Gap(
-                    source_range=opentime.TimeRange(duration=item.out_offset)
-                )
+            next_item = gap.Gap(
+                source_range=opentime.TimeRange(duration=item.out_offset)
             )
         elif index < len(self) - 1:
-            result.append(self[index + 1])
+            next_item = self[index + 1]
 
-        return result
+        return collections.namedtuple('neighbors', ('previous', 'next'))(
+            previous,
+            next_item
+        )
+
+
+# the original name for "track" was "sequence" - this will turn "Sequence"
+# found in OTIO files into Track automatically.
+core.register_type(Track, "Sequence")

@@ -70,7 +70,7 @@ def write_otio(otio_obj, to_session):
     WRITE_TYPE_MAP = {
         otio.schema.Timeline: _write_timeline,
         otio.schema.Stack: _write_stack,
-        otio.schema.Sequence: _write_sequence,
+        otio.schema.Track: _write_track,
         otio.schema.Clip: _write_item,
         otio.schema.Gap: _write_item,
         otio.schema.Transition: _write_transition,
@@ -178,10 +178,10 @@ def _write_stack(in_stack, to_session):
     return new_stack
 
 
-def _write_sequence(in_seq, to_session):
-    new_seq = to_session.newNode("Sequence", str(in_seq.name) or "sequence")
+def _write_track(in_seq, to_session):
+    new_seq = to_session.newNode("Sequence", str(in_seq.name) or "track")
 
-    items_to_serialize = otio.algorithms.sequence_with_expanded_transitions(
+    items_to_serialize = otio.algorithms.track_with_expanded_transitions(
         in_seq
     )
 
@@ -202,6 +202,29 @@ def _write_sequence(in_seq, to_session):
 def _write_timeline(tl, to_session):
     result = write_otio(tl.tracks, to_session)
     return result
+
+
+def _create_media_reference(mr, to_session):
+    if hasattr(mr, "media_reference") and mr.media_reference:
+        if isinstance(mr.media_reference, otio.schema.ExternalReference):
+            to_session.setMedia([str(mr.media_reference.target_url)])
+            return True
+        elif isinstance(mr.media_reference, otio.schema.GeneratorReference):
+            if mr.media_reference.generator_kind == "SMPTEBars":
+                kind = "smptebars"
+                to_session.setMedia(
+                    [
+                        "{},start={},end={},fps={}.movieproc".format(
+                            kind,
+                            mr.available_range().start_time.value,
+                            mr.available_range().end_time_inclusive().value,
+                            mr.available_range().duration.rate
+                        )
+                    ]
+                )
+                return True
+
+    return False
 
 
 def _write_item(it, to_session):
@@ -240,17 +263,8 @@ def _write_item(it, to_session):
     )
     src.setFPS(range_to_read.duration.rate)
 
-    # if the media reference is not missing
-    if (
-        hasattr(it, "media_reference") and
-        it.media_reference and
-        isinstance(
-            it.media_reference,
-            otio.media_reference.External
-        )
-    ):
-        src.setMedia([str(it.media_reference.target_url)])
-    else:
+    # if the media reference is missing
+    if not _create_media_reference(it, src):
         kind = "smptebars"
         if isinstance(it, otio.schema.Gap):
             kind = "blank"

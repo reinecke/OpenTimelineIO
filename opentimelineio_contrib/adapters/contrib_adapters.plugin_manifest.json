@@ -21,6 +21,27 @@
             "execution_scope" : "in process",
             "filepath" : "maya_sequencer.py",
             "suffixes" : ["ma","mb"]
+        },
+        {
+            "OTIO_SCHEMA" : "Adapter.1",
+            "name" : "ale",
+            "execution_scope" : "in process",
+            "filepath" : "ale.py",
+            "suffixes" : ["ale"]
+        },
+        {
+            "OTIO_SCHEMA" : "Adapter.1",
+            "name" : "burnins",
+            "execution_scope" : "in process",
+            "filepath" : "burnins.py",
+            "suffixes" : []
+        },
+        {
+            "OTIO_SCHEMA" : "Adapter.1",
+            "name" : "AAF",
+            "execution_scope" : "in process",
+            "filepath" : "advanced_authoring_format.py",
+            "suffixes" : ["aaf"]
         }
     ]
 }
