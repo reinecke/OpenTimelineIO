@@ -91,6 +91,17 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-build: [cp27*, cp37*, cp38*, cp39*]
+
+        include:
+          - os: ubuntu-latest
+            arch: auto
+
+          - os: windows-latest
+            arch: auto
+
+          - os: macos-latest
+            arch: universal2
+
     steps:
       - uses: actions/checkout@v2.3.5
 
@@ -116,6 +127,7 @@ jobs:
           output-dir: wheelhouse
         env:
           CIBW_BUILD: ${{ matrix.python-build }}
+          CIBW_ARCHS: ${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v2
         with:
