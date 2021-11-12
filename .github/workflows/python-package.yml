@@ -90,7 +90,41 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-build: [cp27*, cp37*, cp38*, cp39*]
+        python-build: [cp37*, cp38*, cp39*]
+
+        include:
+          - os: ubuntu-latest
+            arch: auto
+
+          - os: windows-latest
+            arch: auto
+
+          - os: macos-latest
+            arch: universal2
+
+    steps:
+      - uses: actions/checkout@v2.3.5
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.2.2
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_BUILD: ${{ matrix.python-build }}
+          CIBW_ARCHS: ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: ./wheelhouse/*.whl
+
+  package_legacy_wheels:
+    needs: py_build_test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
     steps:
       - uses: actions/checkout@v2.3.5
 
@@ -104,7 +138,7 @@ jobs:
       # the -A argument that we specify in the setup.py to set the
       # target platform (x86, x64, etc).
       - name: Set Windows Python 2.7 environment variables
-        if: matrix.python-build == 'cp27*' && runner.os == 'Windows'
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           echo "DISTUTILS_USE_SDK=1" >> $GITHUB_ENV
@@ -115,7 +149,7 @@ jobs:
         with:
           output-dir: wheelhouse
         env:
-          CIBW_BUILD: ${{ matrix.python-build }}
+          CIBW_BUILD: cp27*
 
       - uses: actions/upload-artifact@v2
         with:
