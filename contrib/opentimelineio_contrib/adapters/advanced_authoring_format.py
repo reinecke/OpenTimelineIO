@@ -238,7 +238,9 @@ def _find_mob_chain_and_timecode(source_clip, edit_rate):
                 op_stack = _transcribe(op_group_found, list(), edit_rate)
                 time_effect = op_stack.effects[0] if len(op_stack.effects) > 0 else None
 
-            time_scalar = time_effect.time_scalar if hasattr(time_effect, 'time_scalar') else None
+            time_scalar = (
+                time_effect.time_scalar if hasattr(time_effect, 'time_scalar') else None
+            )
             if time_scalar:
                 if source_start_multiplier:
                     err = "Error: multiple source multipliers found during search of " \
