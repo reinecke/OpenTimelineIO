@@ -1,14 +1,20 @@
 # FindPython's Development.Module component was added in 3.18.
 # Require 3.18.2+ because pybind11 recommends it.
 cmake_minimum_required(VERSION 3.18.2)
+# This policy CMP0177 can be removed when we upgrade to CMake >= 3.31.
+cmake_policy(SET CMP0177 NEW)
 
 #------------------------------------------------------------------------------
 # Project Metadata
 # TODO: read this information from a configuration file, here, and in setup.py
 
-set(OTIO_VERSION_MAJOR "0")
-set(OTIO_VERSION_MINOR "19")
-set(OTIO_VERSION_PATCH "0")
+file(READ "src/opentimelineio/version.h" VERSION_H)
+string(REGEX MATCH "VERSION_MAJOR ([0-9]*)" _ ${VERSION_H})
+set(OTIO_VERSION_MAJOR ${CMAKE_MATCH_1})
+string(REGEX MATCH "VERSION_MINOR ([0-9]*)" _ ${VERSION_H})
+set(OTIO_VERSION_MINOR ${CMAKE_MATCH_1})
+string(REGEX MATCH "VERSION_PATCH ([0-9]*)" _ ${VERSION_H})
+set(OTIO_VERSION_PATCH ${CMAKE_MATCH_1})
 set(OTIO_VERSION ${OTIO_VERSION_MAJOR}.${OTIO_VERSION_MINOR}.${OTIO_VERSION_PATCH})
 
 set(OTIO_AUTHOR       "Contributors to the OpenTimelineIO project")
@@ -187,7 +193,7 @@ if(WIN32)
     # Windows debug builds for Python require a d in order for the module to
     # load. This also helps ensure that debug builds in general are matched
     # to the Microsoft debug CRT.
-    set(OTIO_DEBUG_POSTFIX "d")
+    set(OTIO_DEBUG_POSTFIX "_d")
 endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
