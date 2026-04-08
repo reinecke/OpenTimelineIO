@@ -19,7 +19,7 @@ exclude CONTRIBUTORS.md
 exclude GOVERNANCE.md
 exclude VERSIONS.md
 exclude Makefile
-exclude */.DS_Store
+global-exclude .DS_Store
 exclude .clang-format
 exclude OTIO_VERSION.json
 global-exclude *.pyc
